@@ -78,24 +78,8 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
  */
 public class HashedWheelTimer implements Timer {
 
-    static final InternalLogger logger =
-        InternalLoggerFactory.getInstance(HashedWheelTimer.class);
-    private static final AtomicInteger id = new AtomicInteger();
-
-    private static final SharedResourceMisuseDetector misuseDetector =
-        new SharedResourceMisuseDetector(HashedWheelTimer.class);
-
-    private static final AtomicIntegerFieldUpdater<HashedWheelTimer> WORKER_STATE_UPDATER =
-            AtomicIntegerFieldUpdater.newUpdater(HashedWheelTimer.class, "workerState");
-
     private final Worker worker = new Worker();
     private final Thread workerThread;
-
-    public static final int WORKER_STATE_INIT = 0;
-    public static final int WORKER_STATE_STARTED = 1;
-    public static final int WORKER_STATE_SHUTDOWN = 2;
-    @SuppressWarnings({ "unused", "FieldMayBeFinal", "RedundantFieldInitialization" })
-    private volatile int workerState = WORKER_STATE_INIT; // 0 - init, 1 - started, 2 - shut down
 
     private final long tickDuration;
     private final HashedWheelBucket[] wheel;
@@ -103,6 +87,17 @@ public class HashedWheelTimer implements Timer {
     private final CountDownLatch startTimeInitialized = new CountDownLatch(1);
     private final Queue<HashedWheelTimeout> timeouts = new ConcurrentLinkedQueue<HashedWheelTimeout>();
     private volatile long startTime;
+
+    /** --------------------------------------------------------------------------------------*/
+    static final InternalLogger logger = InternalLoggerFactory.getInstance(HashedWheelTimer.class);
+    private static final AtomicInteger id = new AtomicInteger();
+    private static final SharedResourceMisuseDetector misuseDetector = new SharedResourceMisuseDetector(HashedWheelTimer.class);
+    private static final AtomicIntegerFieldUpdater<HashedWheelTimer> WORKER_STATE_UPDATER = AtomicIntegerFieldUpdater.newUpdater(HashedWheelTimer.class, "workerState");
+    public static final int WORKER_STATE_INIT = 0;
+    public static final int WORKER_STATE_STARTED = 1;
+    public static final int WORKER_STATE_SHUTDOWN = 2;
+    @SuppressWarnings({ "unused", "FieldMayBeFinal", "RedundantFieldInitialization" })
+    private volatile int workerState = WORKER_STATE_INIT; // 0 - init, 1 - started, 2 - shut down
 
     /**
      * Creates a new timer with the default thread factory
@@ -211,13 +206,17 @@ public class HashedWheelTimer implements Timer {
         }
 
         // Normalize ticksPerWheel to power of two and initialize the wheel.
+        // 注意：它并不是指定多少就是多少了，这里初始化时间轮的时候，需要找到最近的2的n次幂
         wheel = createWheel(ticksPerWheel);
+        // 2的次幂，在二进制中都是1000，100000，
         mask = wheel.length - 1;
 
         // Convert tickDuration to nanos.
+        // 将时间转换为纳秒
         this.tickDuration = unit.toNanos(tickDuration);
 
         // Prevent overflow.
+        // 防止溢出
         if (this.tickDuration >= Long.MAX_VALUE / wheel.length) {
             throw new IllegalArgumentException(String.format(
                     "tickDuration: %d (expected: 0 < tickDuration in nanos < %d",
@@ -238,6 +237,9 @@ public class HashedWheelTimer implements Timer {
             throw new IllegalArgumentException(
                     "ticksPerWheel must be greater than 0: " + ticksPerWheel);
         }
+        /*
+           如果大于1073741824，normalizeTicksPerWheel()在进行位运算的时候会溢出，导致后续结果不正确
+         */
         if (ticksPerWheel > 1073741824) {
             throw new IllegalArgumentException(
                     "ticksPerWheel may not be greater than 2^30: " + ticksPerWheel);
@@ -251,9 +253,17 @@ public class HashedWheelTimer implements Timer {
         return wheel;
     }
 
+    /**
+     * 找到ticksPerWheel最近的2的n次幂
+     *
+     * @param ticksPerWheel
+     * @return
+     */
     private static int normalizeTicksPerWheel(int ticksPerWheel) {
         int normalizedTicksPerWheel = 1;
         while (normalizedTicksPerWheel < ticksPerWheel) {
+            // 每左移1位相当于乘以2的1次方，
+            // todo 如果ticksPerWheel比较大的情况下，可以需要循环很多次
             normalizedTicksPerWheel <<= 1;
         }
         return normalizedTicksPerWheel;
@@ -267,14 +277,18 @@ public class HashedWheelTimer implements Timer {
      *                               {@linkplain #stop() stopped} already
      */
     public void start() {
+        /** 获取当前时间轮的状态 */
         switch (WORKER_STATE_UPDATER.get(this)) {
+            /** 0：初始化 */
             case WORKER_STATE_INIT:
                 if (WORKER_STATE_UPDATER.compareAndSet(this, WORKER_STATE_INIT, WORKER_STATE_STARTED)) {
                     workerThread.start();
                 }
                 break;
+            /** 1：已启动 */
             case WORKER_STATE_STARTED:
                 break;
+            /** 2：已关闭 */
             case WORKER_STATE_SHUTDOWN:
                 throw new IllegalStateException("cannot be started once stopped");
             default:
@@ -334,6 +348,7 @@ public class HashedWheelTimer implements Timer {
         if (unit == null) {
             throw new NullPointerException("unit");
         }
+        // 重要：启动方法
         start();
 
         // Add the timeout to the timeout queue which will be processed on the next tick.
