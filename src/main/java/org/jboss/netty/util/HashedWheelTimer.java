@@ -379,8 +379,7 @@ public class HashedWheelTimer implements Timer {
         // During processing all the queued HashedWheelTimeouts will be added to the correct HashedWheelBucket.
         /**
          * startTime 是在Work线程中被初始化的，它代表了work线程执行的开始时间
-         * deadline 当前时间+任务的延迟时间-work线程执行的开始时间，就是这个任务真正执行的那一刻时间
-         * todo ？？
+         * deadline 当前时间+任务的延迟时间-work线程执行的开始时间，就是这个任务真正执行的那一刻的相对时间
          */
         long deadline = System.nanoTime() + unit.toNanos(delay) - startTime;
         // 将定时任务封装成HashedWheelTimeout
@@ -391,6 +390,7 @@ public class HashedWheelTimer implements Timer {
     }
 
     private final class Worker implements Runnable {
+        /** 未进行处理的任务集合 */
         private final Set<Timeout> unprocessedTimeouts = new HashSet<Timeout>();
 
         // 步长为1的单调递增计数器,也就是时间轮的指针
