@@ -467,6 +467,7 @@ public class HashedWheelTimer implements Timer {
                 timeout.remainingRounds = remainingRounds;
 
                 // 如果延时任务在队列中等待太久已经过了执行时间，那么这个时候就使用当前tick，也就是放在当前的bucket，此方法调用完后就会被执行
+                // 也就是说过期了，就没必要再等了，
                 final long ticks = Math.max(calculated, tick); // Ensure we don't schedule for past.
                 // mask : 时间轮长度 - 1 通过ticks取模mask，得到一个下标
                 int stopIndex = (int) (ticks & mask);
