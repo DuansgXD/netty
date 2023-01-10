@@ -213,7 +213,7 @@ public class HashedWheelTimer implements Timer {
         // Normalize ticksPerWheel to power of two and initialize the wheel.
         // 注意：它并不是指定多少就是多少了，这里初始化时间轮的时候，需要找到最近的2的n次幂，类似于hashmap的寻址优化算法一样
         wheel = createWheel(ticksPerWheel);
-        /** 用来定位到对应的时钟槽 */
+        /** 用来定位到对应的Bucket */
         // wheel经过上述方法都设置成2的次幂，在二进制中都是1000，100000，
         // 数组长度-1，其二进制低位均为1，通过指针tick&mask，获取当前的数组下标，类似于hashmap的hashcode&(len -1)
         mask = wheel.length - 1;
@@ -309,6 +309,9 @@ public class HashedWheelTimer implements Timer {
         // Wait until the startTime is initialized by the worker.
         while (startTime == 0) {
             try {
+                /**
+                 * newTimeout方法中，依赖startTime，要等工作线程启动赋值完才能继续
+                 */
                 startTimeInitialized.await();
             } catch (InterruptedException ignore) {
                 // Ignore - it will be ready very soon.
