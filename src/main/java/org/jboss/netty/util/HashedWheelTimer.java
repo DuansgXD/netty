@@ -78,16 +78,20 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
  */
 public class HashedWheelTimer implements Timer {
 
-    // 真正执行定时任务的逻辑封装这个Runnable对象中。
+    /** ①：时间轮的Bucket数组 */
+    private final HashedWheelBucket[] wheel;
+    /** ②：真正执行定时任务的逻辑封装这个Runnable对象中。*/
     private final Worker worker = new Worker();
     private final Thread workerThread;
-
+    /** ③：每次tick的持续时间，也就是时间轮1格是多少时间 */
     private final long tickDuration;
-    private final HashedWheelBucket[] wheel;
+    /** ④：等待任务队列 */
+    private final Queue<HashedWheelTimeout> timeouts = new ConcurrentLinkedQueue<HashedWheelTimeout>();
+    /** ⑤：时间轮启动时间，固定值 */
+    private volatile long startTime;
+
     private final int mask;
     private final CountDownLatch startTimeInitialized = new CountDownLatch(1);
-    private final Queue<HashedWheelTimeout> timeouts = new ConcurrentLinkedQueue<HashedWheelTimeout>();
-    private volatile long startTime;
 
     /** --------------------------------------------------------------------------------------*/
     static final InternalLogger logger = InternalLoggerFactory.getInstance(HashedWheelTimer.class);
@@ -219,7 +223,7 @@ public class HashedWheelTimer implements Timer {
         this.tickDuration = unit.toNanos(tickDuration);
 
         // Prevent overflow.
-        // 防止溢出 todo
+        // 太长导致tickDuration * wheel.length > Long.MAX_VALUE 无法计算了。
         if (this.tickDuration >= Long.MAX_VALUE / wheel.length) {
             throw new IllegalArgumentException(String.format(
                     "tickDuration: %d (expected: 0 < tickDuration in nanos < %d",
@@ -481,9 +485,10 @@ public class HashedWheelTimer implements Timer {
 
             for (;;) {
                 // 计算需要sleep的时间, 之所以加999999后再除10000000, 是为了保证足够的sleep时间
-                // 解决的问题，我举个例子，因为这里是ms，假设应该睡2.02ms，但是实际上只会睡2ms（时间精度问题，只能精确到ms）
-                // 加999999只会，会变成3ms，所以宁可多睡不少睡
+                // 解决的问题，我举个例子，因为这里是ms，假设应该睡2.02ms，但是实际上只会睡2ms（时间精度问题，只能精确到ms）加999999会变成3ms，所以宁可多睡不少睡
                 final long currentTime = System.nanoTime() - startTime;
+                // sleepTimeMs = deadline - currentTime
+                // + 999999) / 1000000 为了凑整
                 long sleepTimeMs = (deadline - currentTime + 999999) / 1000000; // +1ms
 
                 if (sleepTimeMs <= 0) {
@@ -499,7 +504,7 @@ public class HashedWheelTimer implements Timer {
                 // the JVM if it runs on windows.
                 //
                 // See https://github.com/netty/netty/issues/356
-                // 为了处理在windows系统上的bug，如果sleep不够10ms则要取整
+                // 如果是windows，需要把睡眠时间调整为10的倍数。为了处理在windows系统上的bug。
                 if (DetectionUtil.isWindows()) {
                     sleepTimeMs = sleepTimeMs / 10 * 10;
                 }
