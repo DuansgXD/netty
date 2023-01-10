@@ -207,7 +207,7 @@ public class HashedWheelTimer implements Timer {
         }
 
         // Normalize ticksPerWheel to power of two and initialize the wheel.
-        // 注意：它并不是指定多少就是多少了，这里初始化时间轮的时候，需要找到最近的2的n次幂
+        // 注意：它并不是指定多少就是多少了，这里初始化时间轮的时候，需要找到最近的2的n次幂，类似于hashmap的寻址优化算法一样
         wheel = createWheel(ticksPerWheel);
         /** 用来定位到对应的时钟槽 */
         // wheel经过上述方法都设置成2的次幂，在二进制中都是1000，100000，
@@ -219,7 +219,7 @@ public class HashedWheelTimer implements Timer {
         this.tickDuration = unit.toNanos(tickDuration);
 
         // Prevent overflow.
-        // 防止溢出
+        // 防止溢出 todo
         if (this.tickDuration >= Long.MAX_VALUE / wheel.length) {
             throw new IllegalArgumentException(String.format(
                     "tickDuration: %d (expected: 0 < tickDuration in nanos < %d",
@@ -232,6 +232,7 @@ public class HashedWheelTimer implements Timer {
                         determiner));
 
         // Misuse check
+        // 如果HashedWheelTimer实例太多，那么就会打印一个error日志
         misuseDetector.increase();
     }
 
@@ -311,6 +312,7 @@ public class HashedWheelTimer implements Timer {
         }
     }
 
+    @Override
     public Set<Timeout> stop() {
         if (Thread.currentThread() == workerThread) {
             throw new IllegalStateException(
@@ -355,6 +357,7 @@ public class HashedWheelTimer implements Timer {
      * @param unit  时间单位
      * @return
      */
+    @Override
     public Timeout newTimeout(TimerTask task, long delay, TimeUnit unit) {
         if (task == null) {
             throw new NullPointerException("task");
@@ -386,6 +389,7 @@ public class HashedWheelTimer implements Timer {
         // 步长为1的单调递增计数器,也就是时间轮的指针
         private long tick;
 
+        @Override
         public void run() {
             // Initialize the startTime.
             startTime = System.nanoTime();
@@ -445,14 +449,19 @@ public class HashedWheelTimer implements Timer {
                     timeout.remove();
                     continue;
                 }
+                // 当前任务的执行时间除以每个窗口的时间间隔，得到一个calculated值（表示需要经过多少tick，指针每跳动一个窗格，tick会递增）
+                // 如：槽位=8，周期tickDuration=100ms，任务时间=900ms，则说明须要轮询一圈后，才能会执行到该任务，即remainingRounds= 1，槽位角标stopIndex=1
                 long calculated = timeout.deadline / tickDuration;
+                // 当前任务需要在时间轮中经历的圈数，因为当前任务执行时间有可能大于完整一圈的时间，所以需要计算经过几圈之后才能执行该任务。
                 long remainingRounds = (calculated - tick) / wheel.length;
                 timeout.remainingRounds = remainingRounds;
 
+                // 取最大的一个tick，有可能当前任务在队列中已经过了执行时间，这种情况下直接用calculated这个值就没意义了。
                 final long ticks = Math.max(calculated, tick); // Ensure we don't schedule for past.
-                // mask : 时间轮长度 - 1
+                // mask : 时间轮长度 - 1 通过ticks取模mask，得到一个下标
                 int stopIndex = (int) (ticks & mask);
 
+                // 把任务添加到指定数组下标位置
                 HashedWheelBucket bucket = wheel[stopIndex];
                 bucket.addTimeout(timeout);
             }
@@ -536,14 +545,17 @@ public class HashedWheelTimer implements Timer {
             this.deadline = deadline;
         }
 
+        @Override
         public Timer getTimer() {
             return timer;
         }
 
+        @Override
         public TimerTask getTask() {
             return task;
         }
 
+        @Override
         public void cancel() {
             int state = state();
             if (state >= ST_CANCELLED) {
@@ -580,10 +592,12 @@ public class HashedWheelTimer implements Timer {
             return state;
         }
 
+        @Override
         public boolean isCancelled() {
             return state == ST_CANCELLED;
         }
 
+        @Override
         public boolean isExpired() {
             return state > ST_IN_BUCKET;
         }
