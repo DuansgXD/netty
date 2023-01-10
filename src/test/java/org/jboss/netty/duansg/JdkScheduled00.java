@@ -7,10 +7,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-/**
- * @author Duansg
- * @date 2022-12-24 22:39
- */
 @SuppressWarnings("all")
 public class JdkScheduled00 {
 

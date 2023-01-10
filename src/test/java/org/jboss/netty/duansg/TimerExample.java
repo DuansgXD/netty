@@ -6,10 +6,6 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 
-/**
- * @author Duansg
- * @date 2022-12-26 23:54
- */
 @SuppressWarnings("all")
 public class TimerExample {
 

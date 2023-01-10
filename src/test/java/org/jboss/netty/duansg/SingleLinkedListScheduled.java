@@ -5,10 +5,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-/**
- * @author Duansg
- * @date 2022-12-27 23:02
- */
 public class SingleLinkedListScheduled {
 
     public static void main(String[] args) {
