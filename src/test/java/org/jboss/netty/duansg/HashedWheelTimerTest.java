@@ -10,12 +10,11 @@ public class HashedWheelTimerTest {
 
 
     public static void main(String[] args) {
-        System.out.println(250/100);
-//
-//        HashedWheelTimer timer = new HashedWheelTimer();
-//        System.out.println("开始：" + now());
-//        timer.newTimeout(timeout -> System.err.println(now()), 3, TimeUnit.SECONDS);
-//        timer.newTimeout(timeout -> System.err.println(now()), 5, TimeUnit.SECONDS);
+
+        HashedWheelTimer timer = new HashedWheelTimer();
+        System.out.println("开始：" + now());
+        timer.newTimeout(timeout -> System.err.println(now()), 3, TimeUnit.SECONDS);
+        timer.newTimeout(timeout -> System.err.println(now()), 5, TimeUnit.SECONDS);
 
     }
 
